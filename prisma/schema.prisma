@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USER & AUTHENTICATION
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  passwordHash  String
+  role          String    // COMPANY_ADMIN | EMPLOYEE | BEAUTICIAN | PLATFORM_ADMIN
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company    Company?    @relation("CompanyAdmin")
+  employee   Employee?
+  beautician Beautician?
+}
+
+// ============================================================
+// COMPANY
+// ============================================================
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  phone         String?
+  address       String?
+  industry      String?
+  employeeCount Int      @default(0)
+  status        String   @default("PENDING") // PENDING | APPROVED | SUSPENDED
+  adminUserId   String   @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  adminUser User       @relation("CompanyAdmin", fields: [adminUserId], references: [id])
+  contract  Contract?
+  employees Employee[]
+  bookings  Booking[]
+}
+
+model Contract {
+  id                String    @id @default(cuid())
+  companyId         String    @unique
+  planName          String    // BASIC | STANDARD | PREMIUM
+  monthlyBudget     Float
+  subsidyPercentage Float     @default(50)
+  maxSubsidyPerUse  Float     @default(2000)
+  startDate         DateTime
+  endDate           DateTime?
+  status            String    @default("ACTIVE") // ACTIVE | EXPIRED | CANCELLED
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+}
+
+// ============================================================
+// EMPLOYEE
+// ============================================================
+
+model Employee {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  companyId  String
+  department String?
+  position   String?
+  status     String   @default("ACTIVE") // ACTIVE | INACTIVE
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id])
+  company  Company   @relation(fields: [companyId], references: [id])
+  bookings Booking[]
+}
+
+// ============================================================
+// BEAUTICIAN
+// ============================================================
+
+model Beautician {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  displayName     String
+  bio             String?
+  profileImage    String?
+  yearsExperience Int      @default(0)
+  specialties     String?  // JSON: ["カット", "カラー"]
+  certifications  String?  // JSON: ["美容師免許"]
+  serviceArea     String?
+  serviceTypes    String?  // JSON: ["ON_SITE", "PARTNER_SALON"]
+  rating          Float    @default(0)
+  reviewCount     Int      @default(0)
+  status          String   @default("PENDING") // PENDING | APPROVED | SUSPENDED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user     User              @relation(fields: [userId], references: [id])
+  services BeauticianService[]
+  schedules Schedule[]
+  bookings  Booking[]
+}
+
+model BeauticianService {
+  id           String  @id @default(cuid())
+  beauticianId String
+  name         String
+  description  String?
+  durationMin  Int
+  price        Float
+  category     String  // CUT | COLOR | PERM | TREATMENT | OTHER
+
+  beautician Beautician @relation(fields: [beauticianId], references: [id])
+  bookings   Booking[]
+}
+
+// ============================================================
+// SCHEDULE
+// ============================================================
+
+model Schedule {
+  id           String   @id @default(cuid())
+  beauticianId String
+  date         DateTime
+  startTime    String   // "09:00"
+  endTime      String   // "18:00"
+  isAvailable  Boolean  @default(true)
+  locationType String   // ON_SITE | PARTNER_SALON | RENTAL_SALON
+  locationName String?
+  createdAt    DateTime @default(now())
+
+  beautician Beautician @relation(fields: [beauticianId], references: [id])
+}
+
+// ============================================================
+// BOOKING & PAYMENT
+// ============================================================
+
+model Booking {
+  id             String   @id @default(cuid())
+  employeeId     String
+  beauticianId   String
+  companyId      String
+  serviceId      String
+  date           DateTime
+  startTime      String
+  endTime        String
+  locationType   String
+  locationDetail String?
+  status         String   @default("PENDING") // PENDING | CONFIRMED | COMPLETED | CANCELLED
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  employee   Employee          @relation(fields: [employeeId], references: [id])
+  beautician Beautician        @relation(fields: [beauticianId], references: [id])
+  company    Company           @relation(fields: [companyId], references: [id])
+  service    BeauticianService @relation(fields: [serviceId], references: [id])
+  payment    Payment?
+}
+
+model Payment {
+  id                 String    @id @default(cuid())
+  bookingId          String    @unique
+  totalAmount        Float
+  companySubsidy     Float
+  employeePayment    Float
+  beauticianPayout   Float
+  platformFee        Float
+  platformFeePercent Float
+  status             String    @default("PENDING") // PENDING | COMPLETED | REFUNDED
+  paidAt             DateTime?
+  createdAt          DateTime  @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+// ============================================================
+// PLATFORM CONFIG
+// ============================================================
+
+model PlatformConfig {
+  id                String   @id @default(cuid())
+  defaultFeePercent Float    @default(20.0)
+  minFeePercent     Float    @default(15.0)
+  maxFeePercent     Float    @default(25.0)
+  updatedAt         DateTime @updatedAt
+}
